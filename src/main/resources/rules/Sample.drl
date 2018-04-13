@@ -1,0 +1,379 @@
+package com.sample
+ 
+import com.sample.DroolsTest.Message;
+
+
+
+// tworzy samochody,klientow , rezerwacje i zwroty
+rule "MakeWorld"
+	when
+	then
+	// cars ( w konstruktorze podajemy kategorie tworzonego pojazdu ) 
+	Cars car1 = new Cars ("A");
+	insert(car1);
+	
+	Cars car2= new Cars("B");
+	insert(car2);
+	
+	Cars car3= new Cars("B");
+	insert(car3);
+	
+	Cars car4= new Cars("D");
+	insert(car4);
+
+	
+	// clients  ( w konstuktorze podajemy czy tworzony klient jest czlonkiem programu lojalnosciowego ( true / false )
+	Client client1 = new Client(true);
+	insert(client1);
+	
+	Client client2 = new Client(false);
+	insert(client2);
+	
+	Client client3 = new Client(false);
+	insert(client3);
+	
+	Client client4 = new Client(false);
+	insert(client4);
+	
+	Client client5 = new Client(true);
+	insert(client5);
+
+	// Rezerwacje i zwroty
+	
+	// - tworzomy parami ( rezerwacja1-zwrot1 , rezerwacja2-zwrot2 ) , aby unikn¹æ sytuacji, w której klient dokona zwrotu pojazdu kilka dni po planowanym terminie w rezerwacji, a
+	// my przydzielimy ju¿ podany samochód innej rezerwacji w tym terminie
+	// domyœlnie ka¿da rezerwacja jest tworzona, ale je¿eli nie ma dostêpnego pojazdu w preferowanym terminie , badz dany klient ma juz rezerwacje w tym terminie - jest ona usuwana funkcja retract 
+	// z obszaru roboczego
+	
+	// Konstruktory :
+	// rezerwacja ( Client nazwaKlienta , String preferowana kategoria ( null - jest brak  preferencji ) , String dataWypozyczenia , String dataPlanowanegoZwrotu , boolean bagaznik ( true jesli ma byc wypozyczony ), boolean seat ( true jesli ma byc wypozyczone ) )
+	// zwrot (  Reservation nazwaRezerwacji (ktorej dotyczy ), String dataZwrotu ( rzeczywista ), int przejachaneKm , int iloscZgubionychKolpakow , boolean zgubionyDowodUbezpieczeniowy , boolean zgubionaRejestracja ) 
+	
+	//KLIENT1
+	Reservation reservation1= new Reservation (client1, null,  "11/11/2016", "12/11/2016", true , true );
+	insert(reservation1);
+	
+	Returns return1 = new Returns ( reservation1 , "12/11/2016 " , 66 , 0 , false , false ) ;
+	insert(return1);
+	
+	//KLIENT2
+	Reservation reservation2= new Reservation (client2, "B",  "10/11/2016", "13/11/2016", true , false );
+	insert(reservation2);
+	
+	Returns return2 = new Returns ( reservation2 , "13/11/2016 " , 100 , 0 , false , false ) ;
+	insert(return2);
+	
+	Reservation reservation3= new Reservation (client2, "A",  "11/11/2016", "14/11/2016", true , false );
+	insert(reservation3);
+
+	
+	//KLIENT3
+
+	Reservation reservation4= new Reservation (client3, "B",  "11/11/2016", "16/11/2016", false , false );
+	insert(reservation4);
+	
+	Returns return3 = new Returns ( reservation4 , "18/11/2016 " , 1000 , 2 , true , false ) ;
+	insert(return3);
+	
+	//KLIENT4
+	Reservation reservation5= new Reservation (client4, "D",  "11/11/2016", "18/11/2016", true  , true );
+	insert(reservation5);
+	
+	Returns return4 = new Returns ( reservation5 , "18/11/2016 " , 10000 , 2 , true , false ) ;
+	insert(return4);
+	
+
+	//KLIENT5
+	Reservation reservation6= new Reservation (client5, "B",  "14/11/2016", "24/11/2016", false  , true );
+	insert(reservation6);
+	
+	Returns return5 = new Returns ( reservation6 , "26/11/2016 " , 200 , 4 , false , false ) ;
+	insert(return5);
+	
+end
+
+
+
+
+// Przydziela rezerwacji samochod w preferowanej przez nia kategori jest jest na stanie wypozyczalni i jest wolny w czasie rezerwacji
+rule "getCar"
+	when
+	r: Reservation (getCar()==null )
+	c: Cars( c.getCategory()==r.getPreferedCategory())
+
+	then
+	if ( c.check(r.getExpectedHiredDays(),r.getClient().getHiredDaysClient() )==false )
+	{
+	System.out.println("Ten klient ma ju¿ inna rezerwacjê w tym terminie i nie moze dokonac kolejnej ") ;
+	retract(r); 
+	}
+		
+	if ( c.check(r.getExpectedHiredDays(), c.getHiredDaysCar() )==true &&  c.check(r.getExpectedHiredDays(),r.getClient().getHiredDaysClient() )==true) {
+	r.setCar(c);
+	c.setHiredDaysCar( c.getDaysBetweenDates( r.getRentalDate(), r. getReturnDate() ) );
+	r.getClient().setHiredDaysClient( c.getDaysBetweenDates( r.getRentalDate(), r. getReturnDate() ));
+	update(r);
+ 	update(c);
+ 	update(r.getClient());
+ 	System.out.println("Przydzielilem samochochod kategorii " + r.getPreferedCategory() );
+ 	}
+ 	
+
+ 	
+end
+
+// katA -> brak wolnych z katA -> przypisz wolne z B
+rule "getCarA"
+	when
+		r: Reservation(getCar()==null , getPreferedCategory()=="A") 
+		cb: Cars( cb.getCategory()=="B" )
+	then
+		if ( cb.check(r.getExpectedHiredDays(),r.getClient().getHiredDaysClient() )==false )
+		{
+		System.out.println("Ten klient ma ju¿ inna rezerwacjê w tym terminie i nie moze dokonac kolejnej ") ;
+		retract(r);
+		 }
+		if ( cb.check(r.getExpectedHiredDays(), cb.getHiredDaysCar() )==true &&  cb.check(r.getExpectedHiredDays(),r.getClient().getHiredDaysClient() )==true ) {
+			r.setCar(cb);
+			cb.setHiredDaysCar( cb.getDaysBetweenDates( r.getRentalDate(), r. getReturnDate() ) );
+			r.getClient().setHiredDaysClient( cb.getDaysBetweenDates( r.getRentalDate(), r. getReturnDate() ));
+			update(r);
+ 			update(cb);
+ 			update(r.getClient());
+ 			System.out.println("Kategori A przydzielilem samochod kat B" );
+ 			}
+end
+
+//katA -> brak wolnych z katB ( brak wolnych + nie istenieja w "swiecie ) -> przypisz D 
+ rule "getCarA1"
+	when
+		r: Reservation(getCar()==null , getPreferedCategory()=="A") 
+		cd: Cars( cd.getCategory()=="D")
+	then
+		if ( cd.check(r.getExpectedHiredDays(),r.getClient().getHiredDaysClient() )==false )
+		{
+		System.out.println("Ten klient ma ju¿ inna rezerwacjê w tym terminie i nie moze dokonac kolejnej ") ;
+		retract(r);
+		}
+		if ( cd.check(r.getExpectedHiredDays(), cd.getHiredDaysCar() )==true &&  cd.check(r.getExpectedHiredDays(),r.getClient().getHiredDaysClient() )==true ) {
+			r.setCar(cd);
+			cd.setHiredDaysCar( cd.getDaysBetweenDates( r.getRentalDate(), r. getReturnDate() ) );
+			r.getClient().setHiredDaysClient( cd.getDaysBetweenDates( r.getRentalDate(), r. getReturnDate() ));
+			update(r);
+ 			update(cd);
+ 			update(r.getClient());
+ 			System.out.println("Kategori A przydzielilem samochod kat D" );
+ 			}
+ 
+end
+
+	
+ 
+//kat B -> przydziela D ( brak wolnych w kat B lub nie istnieja )
+
+ rule "getCarB"
+	when
+		r: Reservation(getCar()==null , getPreferedCategory()=="B") 
+		cd: Cars( cd.getCategory()=="D")
+	then
+		if ( cd.check(r.getExpectedHiredDays(),r.getClient().getHiredDaysClient() )==false )
+		{
+		System.out.println("Ten klient ma ju¿ inna rezerwacjê w tym terminie i nie moze dokonac kolejnej ") ;
+		retract(r);
+		}
+		if( cd.check(r.getExpectedHiredDays(), cd.getHiredDaysCar() )==true && cd.check(r.getExpectedHiredDays(),r.getClient().getHiredDaysClient() )==true ) {
+			r.setCar(cd);
+			cd.setHiredDaysCar( cd.getDaysBetweenDates( r.getRentalDate(), r. getReturnDate() ) );
+			r.getClient().setHiredDaysClient( cd.getDaysBetweenDates( r.getRentalDate(), r. getReturnDate() ));
+			update(r);
+ 			update(cd);
+ 			update(r.getClient());
+ 			System.out.println("Kategori B przydzielilem samochod kat D" );
+ 			}
+ 			
+ 		
+ end	
+ 
+// kat  -> brak dostepnych samochodow dla tej kategorii X oraz wyzszej - usuniecie rezerwacji
+ rule "getCarDend"
+	when
+		r: Reservation(getCar()==null ) 
+	then
+		System.out.println("Przykro nam, ale nie ma wolnych samochodow dla preferowanej kat " + r.getPreferedCategory() +  " i wyzszej, w zwi¹zku z tym  musimy usun¹æ rezerwacje " ); 
+		retract(r);
+		
+ end	
+ 
+ //ustawianie cen wypozyczenia
+ rule "setPriceRentA"
+ 	when
+ 	r: Reservation(getPreferedCategory()=="A")
+ 	then
+ 	if ( r.getExpectedDays() <=3 )
+ 	{ 
+ 	r.setExpectedPrice(r.getExpectedDays() * 69 ); 
+ 	}
+ 	if ( r.getExpectedDays() >3 )
+ 	{ 
+ 	r.setExpectedPrice(r.getExpectedDays() * 59 );
+ 	}
+ 	if (r.getClient().getLoyaltyProgramMember() == true ){
+ 		if ( r.isTrunk()==true &&  r.isBabySeat()==true) {
+ 			r.setExpectedPrice(r.getExpectedPrice() + 10 );
+ 		}
+ 		}
+ 	else {
+ 		if ( r.isTrunk()==true ) {
+ 			r.setExpectedPrice(r.getExpectedPrice() + 10 );
+ 		}
+ 		if (  r.isBabySeat()==true) {
+ 			r.setExpectedPrice(r.getExpectedPrice() + 10 );
+ 		}
+ 	
+ 	}
+ 	
+ 	System.out.println( "Kategoria " +r.getPreferedCategory() + " cena oczekiwana na podstawie rezerwacji  " + r.getExpectedPrice() ) ;
+end
+ 
+ 
+  rule "setPriceRentB"
+ 	when
+ 	r: Reservation(getPreferedCategory()=="B")
+ 	then
+ 	if ( r.getExpectedDays() <=3 )
+ 	{ 
+ 	r.setExpectedPrice(r.getExpectedDays() * 79 ); 
+ 	}
+ 	if ( r.getExpectedDays() >3 )
+ 	{ 
+ 	r.setExpectedPrice(r.getExpectedDays() * 69 );
+ 	}
+ 	if (r.getClient().getLoyaltyProgramMember() == true ){
+ 		if ( r.isTrunk()==true &&  r.isBabySeat()==true) {
+ 			r.setExpectedPrice(r.getExpectedPrice() + 10 );
+ 		}
+ 		}
+ 	else {
+ 		if ( r.isTrunk()==true ) {
+ 			r.setExpectedPrice(r.getExpectedPrice() + 10 );
+ 		}
+ 		if (  r.isBabySeat()==true) {
+ 			r.setExpectedPrice(r.getExpectedPrice() + 10 );
+ 		}
+ 	
+ 	}
+ 	
+ 	System.out.println( "Kategoria " +r.getPreferedCategory() + " cena oczekiwana na podstawie rezerwacji  " + r.getExpectedPrice() ) ;
+end
+
+
+ rule "setPriceRentD"
+ 	when
+ 	r: Reservation(getPreferedCategory()=="D")
+ 	then
+ 	if ( r.getExpectedDays() <=3 )
+ 	{ 
+ 	r.setExpectedPrice(r.getExpectedDays() * 89 ); 
+ 	}
+ 	if ( r.getExpectedDays() >3 )
+ 	{ 
+ 	r.setExpectedPrice(r.getExpectedDays() * 79 );
+ 	}
+ 	if (r.getClient().getLoyaltyProgramMember() == true ){
+ 		if ( r.isTrunk()==true &&  r.isBabySeat()==true) {
+ 			r.setExpectedPrice(r.getExpectedPrice() + 10 );
+ 		}
+ 		}
+ 	else {
+ 		if ( r.isTrunk()==true ) {
+ 			r.setExpectedPrice(r.getExpectedPrice() + 10 );
+ 		}
+ 		if (  r.isBabySeat()==true) {
+ 			r.setExpectedPrice(r.getExpectedPrice() + 10 );
+ 		}
+ 	
+ 	}
+ 	
+ 	System.out.println( "Kategoria " +r.getPreferedCategory() + " cena oczekiwana na podstawie rezerwacji  " + r.getExpectedPrice() ) ;
+end
+
+ 		
+ 		
+//dodanie zajetych dni do pojazdu, wynikajacych z przedluzonych terminow w zwrocie
+
+rule "addExtraReturnDays"
+	when
+		R:Reservation()
+		Z:Returns (Z.getReservation()==R )
+		C:Cars(R.getCar()==C)
+	then
+		C.setHiredDaysCar( C.add2list ( C.getHiredDaysCar(), Z.getAdditionalCarDays() ) );
+end
+
+
+//oblicza dodatkowa cene na podstawie zwrotu 
+
+rule "calculateExtraPrice"
+	when
+		R:Reservation()
+		Z:Returns (Z.getReservation()==R )
+	then
+		System.out.println("Ilosc dni dodatkowych dla rezerwacji  "  + Z.getReservation() + " to : " + Z.getRealAdditionalDays() );
+		
+		if (Z.getRealAdditionalDays()==0) {
+			if (Z.getLostRegistrationDocument()==true) { Z.setAdditionalPrice(500);}
+			if (Z.getLostInsurance()==true) { Z.setAdditionalPrice( Z.getAdditionalPrice()+ 500);}
+			if(Z.getLostCaps()>0) {Z.setAdditionalPrice( Z.getAdditionalPrice()+ Z.getLostCaps()*20);}
+			if(R.getExpectedDays()<=3 ) {Z.setAdditionalPrice( Z.getAdditionalPrice()+ Z.getDistanceInKilometres()*1);}
+			if(R.getExpectedDays()>3 ) {Z.setAdditionalPrice( Z.getAdditionalPrice()+ Z.getDistanceInKilometres()/2 );}
+		}
+		
+		else {
+			if (Z.getLostRegistrationDocument()==true) { Z.setAdditionalPrice(500);}
+			if (Z.getLostInsurance()==true) { Z.setAdditionalPrice( Z.getAdditionalPrice()+ 500);}
+			if(Z.getLostCaps()>0) {Z.setAdditionalPrice( Z.getAdditionalPrice()+ Z.getLostCaps()*20);}
+			if(R.getExpectedDays()<=3 ) {Z.setAdditionalPrice( Z.getAdditionalPrice()+ Z.getDistanceInKilometres()*1);}
+			if(R.getExpectedDays()>3 ) {Z.setAdditionalPrice( Z.getAdditionalPrice()+ Z.getDistanceInKilometres()/2 );}
+			
+			if (R.getPreferedCategory()=="A" ) {
+				if (R.getExpectedDays() <=3 ) {
+					Z.setAdditionalPrice( Z.getAdditionalPrice() + Z.getRealAdditionalDays() * 69 *3 );
+				}
+				if (R.getExpectedDays() >3 ) {
+				Z.setAdditionalPrice( Z.getAdditionalPrice() + Z.getRealAdditionalDays() * 59 *3 );
+				}
+			
+			}
+						if (R.getPreferedCategory()=="B" ) {
+				if (R.getExpectedDays() <=3 ) {
+					Z.setAdditionalPrice( Z.getAdditionalPrice() + Z.getRealAdditionalDays() * 79 *3 );
+				}
+				if (R.getExpectedDays() >3 ) {
+				Z.setAdditionalPrice( Z.getAdditionalPrice() + Z.getRealAdditionalDays() * 69 *3 );
+				}
+			
+			}
+						if (R.getPreferedCategory()=="D" ) {
+				if (R.getExpectedDays()<=3 ) {
+					Z.setAdditionalPrice( Z.getAdditionalPrice() + Z.getRealAdditionalDays() * 89 *3 );
+				}
+				if (R.getExpectedDays() >3 ) {
+				Z.setAdditionalPrice( Z.getAdditionalPrice() + Z.getRealAdditionalDays() * 79 *3 );
+				}
+			
+			}
+		
+		}
+		
+		System.out.println("Cena dodatkowa dla rezerwacji " + Z.getReservation() + " to : " + Z.getAdditionalPrice() + " \n " );
+end
+
+
+//wyswietla podsumowanie rezerwacji i zwrotu
+rule "Display"
+	when
+		R:Reservation()
+		Z:Returns (Z.getReservation()==R )
+	then
+		System.out.println("SUMA wypo¿yczenie : " + R.getExpectedPrice() +  " , SUMA oddanie : " + Z.getAdditionalPrice() + " , SUMA : " + (R.getExpectedPrice()+Z.getAdditionalPrice() + " \n ") ) ;
+end
